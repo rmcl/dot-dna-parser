@@ -7,9 +7,21 @@ type DnaFileRecord struct {
 	Primers       []Primer
 	Features      map[string][]Feature
 	NotesContent  []Note
-	SeqProperties map[string]interface{}
+	Sequence      string
+	SeqProperties SequenceProperties
 	Meta          map[string]interface{}
 	Translation   string
+}
+
+type SequenceProperties struct {
+	Topology string
+	Stranded string
+
+	AMethylated  bool
+	CMethylated  bool
+	KiMethylated bool
+
+	Length uint32
 }
 
 type Note struct {

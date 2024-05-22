@@ -18,7 +18,7 @@ func NewDnaFileReader(filePath string) *DnaFileRecord {
 		Primers:       []Primer{},
 		Features:      make(map[string][]Feature),
 		NotesContent:  []Note{},
-		SeqProperties: make(map[string]interface{}),
+		SeqProperties: SequenceProperties{},
 		Meta:          make(map[string]interface{}),
 	}
 }
@@ -218,27 +218,29 @@ func (sg *DnaFileRecord) ParseSeqProperties(blockSize uint32, file *os.File) {
 		return
 	}
 
-	sg.SeqProperties["topology"] = "linear"
+	properties := SequenceProperties{}
+
+	properties.Topology = "linear"
 	if p&0x01 > 0 {
-		sg.SeqProperties["topology"] = "circular"
+		properties.Topology = "circular"
 	}
 
-	sg.SeqProperties["stranded"] = "single"
+	properties.Stranded = "single"
 	if p&0x02 > 0 {
-		sg.SeqProperties["stranded"] = "double"
+		properties.Stranded = "double"
 	}
 
-	sg.SeqProperties["a_methylated"] = p&0x04 > 0
-	sg.SeqProperties["c_methylated"] = p&0x08 > 0
-	sg.SeqProperties["ki_methylated"] = p&0x10 > 0
+	properties.AMethylated = p&0x04 > 0
+	properties.CMethylated = p&0x08 > 0
+	properties.KiMethylated = p&0x10 > 0
 
-	seqLength := blockSize - 1
-	sg.SeqProperties["length"] = seqLength
+	properties.Length = blockSize - 1
 
-	seq := make([]byte, seqLength)
+	seq := make([]byte, properties.Length)
 	_, err = file.Read(seq)
 	if err != nil {
 		return
 	}
-	sg.SeqProperties["seq"] = string(seq)
+	sg.Sequence = string(seq)
+	sg.SeqProperties = properties
 }
