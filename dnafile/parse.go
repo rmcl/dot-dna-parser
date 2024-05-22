@@ -90,19 +90,19 @@ func (sg *DnaFileRecord) parseHeader(file *os.File) error {
 	var firstByte byte
 	err := binary.Read(file, binary.BigEndian, &firstByte)
 	if err != nil || firstByte != '\t' {
-		return fmt.Errorf("file is in an incorrect format")
+		return fmt.Errorf("first byte error. file is in an incorrect format")
 	}
 
 	var documentLength uint32
 	err = binary.Read(file, binary.BigEndian, &documentLength)
 	if err != nil || documentLength != 14 {
-		return fmt.Errorf("file is in an incorrect format")
+		return fmt.Errorf("document length is not 14")
 	}
 
 	title := make([]byte, 8)
 	err = binary.Read(file, binary.BigEndian, &title)
-	if err != nil || !bytes.Equal(title, []byte("DnaFileRecord")) {
-		return fmt.Errorf("file is in an incorrect format")
+	if err != nil || !bytes.Equal(title, []byte("SnapGene")) {
+		return fmt.Errorf("document title is incorrect")
 	}
 
 	var isDNA bool
