@@ -8,31 +8,41 @@ import (
 	"os"
 )
 
-type Primer struct {
-	// Define the fields based on your Primer class structure
+type DnaFileReader struct {
+	filePath string
 }
 
-func NewDnaFileReader(filePath string) *DnaFileRecord {
-	return &DnaFileRecord{
-		FilePath:      filePath,
-		Primers:       []Primer{},
-		Features:      make(map[string][]Feature),
-		NotesContent:  []Note{},
-		SeqProperties: SequenceProperties{},
-		Meta:          make(map[string]interface{}),
+func NewDnaFileReader(filePath string) *DnaFileReader {
+	return &DnaFileReader{
+		filePath: filePath,
 	}
 }
 
-func (sg *DnaFileRecord) Parse() error {
-	file, err := os.Open(sg.FilePath)
+// Create a new record for holding the contents of a dna file.
+func newDnaFileRecord(filePath string) *DnaFileRecord {
+	return &DnaFileRecord{
+		FilePath: filePath,
+		//Primers:       []Primer{},
+		Features:           make(map[string][]Feature),
+		Notes:              make(map[string]string),
+		SequenceProperties: SequenceProperties{},
+		Meta:               make(map[string]interface{}),
+	}
+}
+
+/* Parse reads the dna file and returns a DnaFileRecord object */
+func (reader *DnaFileReader) Parse() (*DnaFileRecord, error) {
+	file, err := os.Open(reader.filePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
 
-	err = sg.parseHeader(file)
+	record := newDnaFileRecord(reader.filePath)
+
+	err = reader.parseHeader(file, record)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for {
@@ -48,28 +58,26 @@ func (sg *DnaFileRecord) Parse() error {
 			break
 		}
 
-		fmt.Println("Block:", block, "Size:", blockSize)
-
 		switch block {
 		case 0:
-			sg.ParseSeqProperties(blockSize, file)
+			reader.ParseSeqProperties(blockSize, file, record)
 		case 6:
-			data, err := sg.getBlockData(blockSize, file)
+			data, err := reader.getBlockData(blockSize, file)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			err = sg.ParseNotes(data)
+			err = reader.ParseNotes(data, record)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case 10:
-			data, err := sg.getBlockData(blockSize, file)
+			data, err := reader.getBlockData(blockSize, file)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			err = sg.ParseFeatures(data)
+			err = reader.ParseFeatures(data, record)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 		default:
@@ -78,15 +86,15 @@ func (sg *DnaFileRecord) Parse() error {
 			// Skip this block
 			_, err = file.Seek(int64(blockSize), 1)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
-	return nil
+	return record, nil
 }
 
-func (sg *DnaFileRecord) parseHeader(file *os.File) error {
+func (reader *DnaFileReader) parseHeader(file *os.File, record *DnaFileRecord) error {
 	var firstByte byte
 	err := binary.Read(file, binary.BigEndian, &firstByte)
 	if err != nil || firstByte != '\t' {
@@ -123,7 +131,7 @@ func (sg *DnaFileRecord) parseHeader(file *os.File) error {
 		return err
 	}
 
-	sg.Meta = map[string]interface{}{
+	record.Meta = map[string]interface{}{
 		"is_dna":         isDNA,
 		"export_version": exportVersion,
 		"import_version": importVersion,
@@ -131,7 +139,7 @@ func (sg *DnaFileRecord) parseHeader(file *os.File) error {
 	return nil
 }
 
-func (sg *DnaFileRecord) getBlockData(blockSize uint32, file *os.File) ([]byte, error) {
+func (sg *DnaFileReader) getBlockData(blockSize uint32, file *os.File) ([]byte, error) {
 	content := make([]byte, blockSize)
 	_, err := file.Read(content)
 	if err != nil {
@@ -140,23 +148,54 @@ func (sg *DnaFileRecord) getBlockData(blockSize uint32, file *os.File) ([]byte, 
 	return content, nil
 }
 
-func (sg *DnaFileRecord) ParseNotes(block []byte) error {
+// Parser for the Notes block
+type notesXml struct {
+	Fields map[string]string
+}
 
-	var notes []Note
-	err := xml.Unmarshal(block, &notes)
+// UnmarshalXML custom unmarshals the Notes structure to fill the map.
+func (n *notesXml) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	n.Fields = make(map[string]string)
+	for {
+		// Read the next token from the decoder
+		token, err := d.Token()
+		if err != nil {
+			return err
+		}
+
+		// If it's an end element matching the start element, break the loop
+		switch elem := token.(type) {
+		case xml.EndElement:
+			if elem.Name == start.Name {
+				return nil
+			}
+		case xml.StartElement:
+			var value string
+			err := d.DecodeElement(&value, &elem)
+			if err != nil {
+				return err
+			}
+			n.Fields[elem.Name.Local] = value
+		}
+	}
+}
+
+func (reader *DnaFileReader) ParseNotes(block []byte, record *DnaFileRecord) error {
+
+	var notes notesXml
+	err := xml.NewDecoder(bytes.NewReader(block)).Decode(&notes)
 	if err != nil {
 		return err
 	}
 
-	sg.NotesContent = notes
+	record.Notes = notes.Fields
 	return nil
 }
 
-func (sg *DnaFileRecord) ParseFeatures(block []byte) error {
+func (reader *DnaFileReader) ParseFeatures(block []byte, record *DnaFileRecord) error {
 	var features Features
 	err := xml.Unmarshal(block, &features)
 	if err != nil {
-		fmt.Println("Error unmarshalling XML:", err)
 		return err
 	}
 
@@ -211,7 +250,7 @@ func (sg *DnaFileRecord) ParseFeatures(block []byte) error {
 		}
 */
 
-func (sg *DnaFileRecord) ParseSeqProperties(blockSize uint32, file *os.File) {
+func (reader *DnaFileReader) ParseSeqProperties(blockSize uint32, file *os.File, record *DnaFileRecord) {
 	var p byte
 	err := binary.Read(file, binary.BigEndian, &p)
 	if err != nil {
@@ -241,6 +280,6 @@ func (sg *DnaFileRecord) ParseSeqProperties(blockSize uint32, file *os.File) {
 	if err != nil {
 		return
 	}
-	sg.Sequence = string(seq)
-	sg.SeqProperties = properties
+	record.Sequence = string(seq)
+	record.SequenceProperties = properties
 }

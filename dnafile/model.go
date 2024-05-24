@@ -3,14 +3,14 @@ package dnafile
 import "encoding/xml"
 
 type DnaFileRecord struct {
-	FilePath      string
-	Primers       []Primer
-	Features      map[string][]Feature
-	NotesContent  []Note
-	Sequence      string
-	SeqProperties SequenceProperties
-	Meta          map[string]interface{}
-	Translation   string
+	FilePath string
+	//Primers       []Primer
+	Features           map[string][]Feature
+	Notes              map[string]string
+	Sequence           string
+	SequenceProperties SequenceProperties
+	Meta               map[string]interface{}
+	Translation        string
 }
 
 type SequenceProperties struct {
@@ -25,8 +25,13 @@ type SequenceProperties struct {
 }
 
 type Note struct {
-	Tag     string
-	Content string
+	UUID                    string `xml:"UUID"`
+	Type                    string `xml:"Type"`
+	ConfirmedExperimentally int    `xml:"ConfirmedExperimentally"`
+	Created                 string `xml:"Created,attr"`
+	LastModified            string `xml:"LastModified,attr"`
+	SequenceClass           string `xml:"SequenceClass"`
+	TransformedInto         string `xml:"TransformedInto"`
 }
 
 type Features struct {
