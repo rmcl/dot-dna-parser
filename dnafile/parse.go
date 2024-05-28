@@ -23,10 +23,10 @@ func newDnaFileRecord(filePath string) *DnaFileRecord {
 	return &DnaFileRecord{
 		FilePath: filePath,
 		//Primers:       []Primer{},
-		Features:           make(map[string][]Feature),
+		Features:           make([]Feature, 0),
 		Notes:              make(map[string]string),
 		SequenceProperties: SequenceProperties{},
-		Meta:               make(map[string]interface{}),
+		Meta:               Meta{},
 	}
 }
 
@@ -131,11 +131,12 @@ func (reader *DnaFileReader) parseHeader(file *os.File, record *DnaFileRecord) e
 		return err
 	}
 
-	record.Meta = map[string]interface{}{
-		"is_dna":         isDNA,
-		"export_version": exportVersion,
-		"import_version": importVersion,
+	record.Meta = Meta{
+		IsDna:         isDNA,
+		ExportVersion: uint(exportVersion),
+		ImportVersion: uint(importVersion),
 	}
+
 	return nil
 }
 
@@ -149,12 +150,9 @@ func (sg *DnaFileReader) getBlockData(blockSize uint32, file *os.File) ([]byte, 
 }
 
 // Parser for the Notes block
-type notesXml struct {
-	Fields map[string]string
-}
 
 // UnmarshalXML custom unmarshals the Notes structure to fill the map.
-func (n *notesXml) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+func (n *xmlNotes) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.Fields = make(map[string]string)
 	for {
 		// Read the next token from the decoder
@@ -181,8 +179,7 @@ func (n *notesXml) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 }
 
 func (reader *DnaFileReader) ParseNotes(block []byte, record *DnaFileRecord) error {
-
-	var notes notesXml
+	var notes xmlNotes
 	err := xml.NewDecoder(bytes.NewReader(block)).Decode(&notes)
 	if err != nil {
 		return err
@@ -193,49 +190,98 @@ func (reader *DnaFileReader) ParseNotes(block []byte, record *DnaFileRecord) err
 }
 
 func (reader *DnaFileReader) ParseFeatures(block []byte, record *DnaFileRecord) error {
-	var features Features
+	var features xmlFeatures
 	err := xml.Unmarshal(block, &features)
 	if err != nil {
 		return err
 	}
 
+	resultFeatures := make([]Feature, 0)
+
 	// Print the parsed data
-	fmt.Printf("NextValidID: %s\n", features.NextValidID)
+	//fmt.Printf("NextValidID: %s\n", features.NextValidID)
 	for _, feature := range features.FeatureList {
-		fmt.Printf("Feature Name: %s, Type: %s\n", feature.Name, feature.Type)
+
+		segments := make([]FeatureSegment, 0)
 		for _, segment := range feature.Segments {
-			fmt.Printf("  Segment Range: %s, Color: %s\n", segment.Range, segment.Color)
+			fmt.Printf("  Segment Range: %s, Color: %s---%s\n", segment.Range, segment.Color, segment.Translated)
+
+			start, end, err := parseRange(segment.Range)
+			if err != nil {
+				return err
+			}
+
+			var isTranslated = false
+			if segment.Translated == "1" {
+				isTranslated = true
+			}
+
+			segments = append(segments, FeatureSegment{
+				Name:         segment.Name,
+				Color:        segment.Color,
+				Start:        start,
+				End:          end,
+				IsTranslated: isTranslated,
+			})
 		}
-		for _, q := range feature.Qs {
-			fmt.Printf("  Q Name: %s, Value: %s\n", q.Name, q.V.Text)
+
+		qualifiers := make(map[string]string, 0)
+		for _, q := range feature.Qualifiers {
+			qualifiers[q.Name] = q.Value.Text
 		}
+
+		var start, end uint
+		if len(segments) > 0 {
+			// TODO: What do we do if there are multiple segments?
+			// For now, just take the first segment
+			start = segments[0].Start
+			end = segments[0].End
+		}
+
+		newFeature := Feature{
+			Name: feature.Name,
+			Type: feature.Type,
+
+			Start: start,
+			End:   end,
+
+			Qualifiers: qualifiers,
+			Segments:   segments,
+		}
+
+		resultFeatures = append(resultFeatures, newFeature)
 	}
+
+	record.Features = resultFeatures
 
 	return nil
 }
 
+func parseRange(rangeStr string) (uint, uint, error) {
+	var start, end uint
+	_, err := fmt.Sscanf(rangeStr, "%d-%d", &start, &end)
+	if err != nil {
+		return 0, 0, err
+	}
+	return start, end, nil
+}
+
 /*
 
-			case 5:
+TODO: PARSE PRIMERS
 
-				/*root, err := sg.GetXML(blockSize, file)
-				if err != nil {
-					return err
-				}*
-				fmt.Println("NOT IMPLEMENTED")
-				errors.New("Not implemented")
-				//sg.ParsePrimers(root)
-			default:
-				_, err = file.Seek(int64(blockSize), 1)
-				if err != nil {
-					return err
-				}
-			}
-			*
-		}
+case 5:
 
-		return nil
-	}
+	/*root, err := sg.GetXML(blockSize, file)
+	if err != nil {
+		return err
+	}*
+	fmt.Println("NOT IMPLEMENTED")
+	errors.New("Not implemented")
+	//sg.ParsePrimers(root)
+
+*
+
 
 	/*
 		func (sg *DnaFileRecord) ParsePrimers(root *xml.Element) {

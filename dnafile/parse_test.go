@@ -58,12 +58,19 @@ func TestParseMeta(t *testing.T) {
 		return
 	}
 
-	if len(record.Meta) != 3 {
-		t.Errorf("Expected 3 meta, got %d", len(record.Meta))
+	if record.Meta.IsDna != true {
+		t.Errorf("Expected is_dna to be true, got %t", record.Meta.IsDna)
+		return
 	}
 
-	if record.Meta["is_dna"] != true {
-		t.Errorf("Expected is_dna to be true, got %t", record.Meta["is_dna"])
+	if record.Meta.ExportVersion != 15 {
+		t.Errorf("Expected ExportVersion to be 15, got %d", record.Meta.ExportVersion)
+		return
+	}
+
+	if record.Meta.ImportVersion != 19 {
+		t.Errorf("Expected ImportVersion to be 19, got %d", record.Meta.ImportVersion)
+		return
 	}
 
 }
@@ -110,10 +117,47 @@ func TestParseNotes(t *testing.T) {
 }
 
 func TestParseFeatures(t *testing.T) {
-	_, err := NewDnaFileReader(exampleFilePath).Parse()
+	record, err := NewDnaFileReader(exampleFilePath).Parse()
 	if err != nil {
 		t.Errorf("Error parsing file: %v", err)
 		return
 	}
-	t.Fail()
+
+	if len(record.Features) != 14 {
+		t.Errorf("Expected 14 feature, got %d", len(record.Features))
+		return
+	}
+
+	firstFeature := record.Features[0]
+	if firstFeature.Type != "RBS" {
+		t.Errorf("Expected first feature to be of type RBS, got %s", firstFeature.Type)
+	}
+
+	if firstFeature.Start != 298 {
+		t.Errorf("Expected first feature to start at 298, got %d", firstFeature.Start)
+	}
+
+	if firstFeature.End != 303 {
+		t.Errorf("Expected first feature to end at 303, got %d", firstFeature.End)
+	}
+
+	if len(firstFeature.Segments) != 1 {
+		t.Errorf("Expected first feature to have 5 segments, got %d", len(firstFeature.Segments))
+	}
+
+	if firstFeature.Segments[0].Start != 298 {
+		t.Errorf("Expected first feature segment to start at 298, got %d", firstFeature.Segments[0].Start)
+	}
+
+	if firstFeature.Segments[0].End != 303 {
+		t.Errorf("Expected first feature segment to end at 303, got %d", firstFeature.Segments[0].End)
+	}
+
+	if firstFeature.Segments[0].Color != "#a6acb3" {
+		t.Errorf("Expected first feature segment color to be #a6acb3, got %s", firstFeature.Segments[0].Color)
+	}
+
+	if firstFeature.Segments[0].IsTranslated != false {
+		t.Errorf("Expected first feature segment to be isTranslated false, got %v", firstFeature.Segments[0].IsTranslated)
+	}
 }
