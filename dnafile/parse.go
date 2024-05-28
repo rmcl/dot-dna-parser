@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -60,13 +61,13 @@ func (reader *DnaFileReader) Parse() (*DnaFileRecord, error) {
 
 		switch block {
 		case 0:
-			reader.ParseSeqProperties(blockSize, file, record)
+			reader.parseSeqProperties(blockSize, file, record)
 		case 6:
 			data, err := reader.getBlockData(blockSize, file)
 			if err != nil {
 				return nil, err
 			}
-			err = reader.ParseNotes(data, record)
+			err = reader.parseNotes(data, record)
 			if err != nil {
 				return nil, err
 			}
@@ -75,7 +76,7 @@ func (reader *DnaFileReader) Parse() (*DnaFileRecord, error) {
 			if err != nil {
 				return nil, err
 			}
-			err = reader.ParseFeatures(data, record)
+			err = reader.parseFeatures(data, record)
 			if err != nil {
 				return nil, err
 			}
@@ -152,44 +153,55 @@ func (sg *DnaFileReader) getBlockData(blockSize uint32, file *os.File) ([]byte, 
 // Parser for the Notes block
 
 // UnmarshalXML custom unmarshals the Notes structure to fill the map.
-func (n *xmlNotes) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	n.Fields = make(map[string]string)
+func unmarshalNotes(d *xml.Decoder) (map[string]string, error) {
+	notes := make(map[string]string)
 	for {
 		// Read the next token from the decoder
 		token, err := d.Token()
 		if err != nil {
-			return err
+			if err == io.EOF {
+				break
+			}
+			return notes, err
 		}
+
+		fmt.Println(token)
 
 		// If it's an end element matching the start element, break the loop
 		switch elem := token.(type) {
 		case xml.EndElement:
-			if elem.Name == start.Name {
-				return nil
+			if elem.Name.Local == "Notes" {
+				return notes, nil
 			}
 		case xml.StartElement:
+			if elem.Name.Local == "Notes" {
+				continue
+			}
+
 			var value string
 			err := d.DecodeElement(&value, &elem)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			n.Fields[elem.Name.Local] = value
+			notes[elem.Name.Local] = value
 		}
 	}
+	return notes, nil
 }
 
-func (reader *DnaFileReader) ParseNotes(block []byte, record *DnaFileRecord) error {
-	var notes xmlNotes
-	err := xml.NewDecoder(bytes.NewReader(block)).Decode(&notes)
+func (reader *DnaFileReader) parseNotes(block []byte, record *DnaFileRecord) error {
+	notes, err := unmarshalNotes(
+		xml.NewDecoder(bytes.NewReader(block)))
 	if err != nil {
 		return err
 	}
 
-	record.Notes = notes.Fields
+	fmt.Println(notes)
+	record.Notes = notes
 	return nil
 }
 
-func (reader *DnaFileReader) ParseFeatures(block []byte, record *DnaFileRecord) error {
+func (reader *DnaFileReader) parseFeatures(block []byte, record *DnaFileRecord) error {
 	var features xmlFeatures
 	err := xml.Unmarshal(block, &features)
 	if err != nil {
@@ -204,7 +216,7 @@ func (reader *DnaFileReader) ParseFeatures(block []byte, record *DnaFileRecord) 
 
 		segments := make([]FeatureSegment, 0)
 		for _, segment := range feature.Segments {
-			fmt.Printf("  Segment Range: %s, Color: %s---%s\n", segment.Range, segment.Color, segment.Translated)
+			//fmt.Printf("  Segment Range: %s, Color: %s---%s\n", segment.Range, segment.Color, segment.Translated)
 
 			start, end, err := parseRange(segment.Range)
 			if err != nil {
@@ -296,7 +308,7 @@ case 5:
 		}
 */
 
-func (reader *DnaFileReader) ParseSeqProperties(blockSize uint32, file *os.File, record *DnaFileRecord) {
+func (reader *DnaFileReader) parseSeqProperties(blockSize uint32, file *os.File, record *DnaFileRecord) {
 	var p byte
 	err := binary.Read(file, binary.BigEndian, &p)
 	if err != nil {

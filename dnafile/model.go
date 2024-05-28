@@ -104,5 +104,6 @@ type xmlValue struct {
 }
 
 type xmlNotes struct {
-	Fields map[string]string
+	Name  string   `xml:"name,attr"`
+	Value xmlValue `xml:"V"`
 }
