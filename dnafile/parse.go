@@ -210,8 +210,6 @@ func (reader *DnaFileReader) parseFeatures(block []byte, record *DnaFileRecord) 
 
 	resultFeatures := make([]Feature, 0)
 
-	// Print the parsed data
-	//fmt.Printf("NextValidID: %s\n", features.NextValidID)
 	for _, feature := range features.FeatureList {
 
 		segments := make([]FeatureSegment, 0)
@@ -242,6 +240,13 @@ func (reader *DnaFileReader) parseFeatures(block []byte, record *DnaFileRecord) 
 			qualifiers[q.Name] = q.Value.Text
 		}
 
+		var label string
+		if qualLabel, ok := qualifiers["label"]; ok {
+			label = qualLabel
+		} else {
+			label = feature.Name
+		}
+
 		var start, end uint
 		if len(segments) > 0 {
 			// TODO: What do we do if there are multiple segments?
@@ -251,8 +256,9 @@ func (reader *DnaFileReader) parseFeatures(block []byte, record *DnaFileRecord) 
 		}
 
 		newFeature := Feature{
-			Name: feature.Name,
-			Type: feature.Type,
+			Name:  feature.Name,
+			Type:  feature.Type,
+			Label: label,
 
 			Start: start,
 			End:   end,

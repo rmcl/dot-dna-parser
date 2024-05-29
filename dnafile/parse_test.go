@@ -133,6 +133,14 @@ func TestParseFeatures(t *testing.T) {
 		t.Errorf("Expected first feature to be of type RBS, got %s", firstFeature.Type)
 	}
 
+	if firstFeature.Name != "RBS" {
+		t.Errorf("Expected first feature to be named RBS, got %s", firstFeature.Name)
+	}
+
+	if firstFeature.Label != "RBS" {
+		t.Errorf("Expected first feature to be labeled RBS, got %s", firstFeature.Label)
+	}
+
 	if firstFeature.Start != 298 {
 		t.Errorf("Expected first feature to start at 298, got %d", firstFeature.Start)
 	}
